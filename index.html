@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MedStat EMS — Pierce County PCR (All Phases)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <!-- jsPDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- React + ReactDOM + Babel (for single-file demo) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    :root{--blue:#0b5ed7;--muted:#6b7280}
+    body{font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background:#f3f4f6; margin:0}
+    .wrap{max-width:1200px;margin:20px auto;padding:18px}
+    header.notice{background:#fff3cd;border:1px solid #ffeeba;padding:12px;border-radius:6px;color:#856404;margin-bottom:14px}
+    .app-header{background:var(--blue);color:white;padding:14px;border-radius:6px;margin-bottom:12px}
+    .grid{display:grid;gap:12px}
+    .cols-3{grid-template-columns:2fr 1fr}
+    .card{background:white;border-radius:8px;padding:12px;box-shadow:0 1px 3px rgba(0,0,0,0.06)}
+    input, textarea, select, button{font:inherit}
+    .row{display:flex;gap:8px;align-items:center}
+    .muted{color:var(--muted);font-size:13px}
+    textarea{min-height:120px}
+    .small{font-size:13px}
+    .btn{padding:8px 10px;border-radius:6px;border:0;cursor:pointer}
+    .btn-primary{background:var(--blue);color:white}
+    .btn-green{background:#16a34a;color:white}
+    .btn-red{background:#dc2626;color:white}
+    .btn-gray{background:#e5e7eb}
+    .list-scroll{max-height:320px;overflow:auto}
+    .pin-btn{background:#d9534f;color:white;border-radius:6px;padding:4px 6px;border:0}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    table th, table td{border:1px solid #e5e7eb;padding:6px;text-align:left}
+    .tiny{font-size:12px;color:#374151}
+    .svg-wrap{display:flex;gap:10px;align-items:flex-start}
+    .svg-box{border:1px dashed #e6e7ea;padding:6px;border-radius:6px;background:white}
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+
+const { useState, useEffect, useRef } = React;
+const { jsPDF } = window.jspdf;
+
+const LS_KEY = 'pcrReports_v1';
+
+function nowTime(){ const d=new Date(); return d.toTimeString().slice(0,5); }
+function today(){ return new Date().toISOString().slice(0,10); }
+function generatePCRId(){
+  const year = new Date().getFullYear();
+  const key = `pcr_counter_${year}`;
+  const raw = localStorage.getItem(key);
+  const next = raw ? parseInt(raw,10)+1 : 1;
+  localStorage.setItem(key,String(next));
+  return `PCR-${year}-${String(next).padStart(4,'0')}`;
+}
+
+// Anatomical zones (viewBox coords 0..200 x 0..400)
+const ZONES = [
+  { id:'head', name:'Head', x:100, y:40, r:30 },
+  { id:'neck', name:'Neck', x:100, y:70, r:16 },
+  { id:'chest', name:'Chest', x:100, y:120, r:40 },
+  { id:'abdomen', name:'Abdomen', x:100, y:180, r:36 },
+  { id:'pelvis', name:'Pelvis', x:100, y:235, r:30 },
+  { id:'l_arm', name:'Left Arm', x:60, y:140, r:28 },
+  { id:'r_arm', name:'Right Arm', x:140, y:140, r:28 },
+  { id:'l_leg', name:'Left Leg', x:85, y:310, r:36 },
+  { id:'r_leg', name:'Right Leg', x:115, y:310, r:36 },
+  { id:'back_upper', name:'Back (Upper)', x:100, y:130, r:40 },
+  { id:'back_lower', name:'Back (Lower)', x:100, y:190, r:36 },
+];
+
+const PRELOADED_HOSPITALS = [
+  'Mayo Clinic Health System - Red Wing',
+  'River Falls Area Hospital',
+  'Western Wisconsin Health - Baldwin',
+  'Mayo Clinic Health System - Menomonie',
+  'Regions Hospital - St. Paul, MN',
+  'UW Health - Eau Claire',
+  'Other'
+];
+
+const PRELOADED_MEDS = [
+  'Oxygen','Aspirin','Nitroglycerin','Epinephrine','Naloxone (Narcan)',
+  'Albuterol','Atropine','Amiodarone','Dextrose (D10 / D50)','Glucagon',
+  'Fentanyl','Morphine','Ketamine'
+];
+
+function emptyForm(){
+  return {
+    id:'',
+    date: today(),
+    time: nowTime(),
+    ptNumber:'', patientName:'', gender:'', address:'', city:'', state:'', zip:'', phone:'', ssn:'',
+    dob:'', age:'', height:'', weight:'', chiefComplaint:'', loc:'', otherFindings:'',
+    incidentTimes:{ dispatch:'', enroute:'', onScene:'', patientContact:'', transportStart:'', arrivalHospital:'', inService:'' },
+    vitalsLog:[], medsLog:[], interventions:[], timeline:[],
+    receivingFacility:'', receivingFacilityOther:'', transportMode:'', disposition:'',
+    leadProvider:'', certification:'', partners:'', unitNumber:'', providerSignature:'', outcome:'',
+    narrative:'', diagram:{ front:[], back:[] }
+  };
+}
+
+function App(){
+  const [form, setForm] = useState(emptyForm());
+  const [reports, setReports] = useState([]);
+  const [filter, setFilter] = useState('');
+  const [diagramView, setDiagramView] = useState('front');
+  const svgRef = useRef(null);
+  const dragging = useRef(null);
+
+  useEffect(()=>{
+    const stored = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+    setReports(stored);
+  },[]);
+  useEffect(()=> localStorage.setItem(LS_KEY, JSON.stringify(reports)), [reports]);
+
+  function updateField(k,v){ setForm(f => ({...f, [k]:v})); }
+  function updateNested(path, v){
+    setForm(f=>{
+      const copy = JSON.parse(JSON.stringify(f));
+      const parts = path.split('.');
+      let cur = copy;
+      for(let i=0;i<parts.length-1;i++){ cur = cur[parts[i]] = {...cur[parts[i]]}; }
+      cur[parts[parts.length-1]] = v;
+      return copy;
+    });
+  }
+
+  // Vitals
+  function addVitals(){ setForm(f=>({...f, vitalsLog:[{time:nowTime(),bp:'',pulse:'',resp:'',spo2:'',temp:'',gcs:'',notes:''}, ...(f.vitalsLog||[])]})); }
+  function updateVitals(i,k,v){ setForm(f=>{const c=JSON.parse(JSON.stringify(f)); c.vitalsLog[i][k]=v; return c;}); }
+  function delVitals(i){ setForm(f=>({...f, vitalsLog: f.vitalsLog.filter((_,j)=>j!==i)})); }
+
+  // meds
+  function addMed(){ setForm(f=>({...f, medsLog:[{name:'',dose:'',route:'',time:nowTime(),givenBy:f.leadProvider||''}, ...(f.medsLog||[])]})); }
+  function updateMed(i,k,v){ setForm(f=>{const c=JSON.parse(JSON.stringify(f)); c.medsLog[i][k]=v; return c; }); }
+  function delMed(i){ setForm(f=>({...f, medsLog: f.medsLog.filter((_,j)=>j!==i)})); }
+
+  // timeline
+  function addEvent(){ setForm(f=>({...f, timeline:[{time:nowTime(),event:'',notes:''}, ...(f.timeline||[])]})); }
+  function updateEvent(i,k,v){ setForm(f=>{const c=JSON.parse(JSON.stringify(f)); c.timeline[i][k]=v; return c;}); }
+  function delEvent(i){ setForm(f=>({...f, timeline: f.timeline.filter((_,j)=>j!==i)})); }
+
+  // interventions
+  function toggleInterv(name){ setForm(f=>{ const has = f.interventions.includes(name); return {...f, interventions: has? f.interventions.filter(x=>x!==name): [...f.interventions, name]}; }); }
+
+  // diagram helpers
+  function svgPointFromEvent(e){
+    const svg = svgRef.current;
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX; pt.y = e.clientY;
+    const inv = svg.getScreenCTM().inverse();
+    const loc = pt.matrixTransform(inv);
+    return { x: Number(loc.x.toFixed(1)), y: Number(loc.y.toFixed(1)) };
+  }
+  function findZone(x,y){
+    for(const z of ZONES){
+      const dx = x - z.x, dy = y - z.y;
+      if (dx*dx + dy*dy <= z.r*z.r) return z;
+    }
+    return null;
+  }
+
+  function handleDiagramClick(e){
+    if (dragging.current) return; // ignore if dragging
+    const pos = svgPointFromEvent(e);
+    const zone = findZone(pos.x,pos.y);
+    if (zone){
+      const label = prompt(`Label for ${zone.name}:`, zone.name);
+      if (label===null) return;
+      setForm(f=>{ const c=JSON.parse(JSON.stringify(f)); c.diagram[diagramView].push({x:zone.x,y:zone.y,label}); return c;});
+    } else {
+      const label = prompt('Label for this pin (e.g. "Laceration")','');
+      if (label===null) return;
+      setForm(f=>{ const c=JSON.parse(JSON.stringify(f)); c.diagram[diagramView].push({x:pos.x,y:pos.y,label}); return c;});
+    }
+  }
+
+  function onPinPointerDown(e, view, idx){
+    e.stopPropagation();
+    dragging.current = { view, idx, pointerId: e.pointerId };
+    try{ svgRef.current.setPointerCapture(e.pointerId); } catch {}
+  }
+  function onPointerMove(e){
+    if (!dragging.current) return;
+    const pos = svgPointFromEvent(e);
+    const zone = findZone(pos.x,pos.y);
+    setForm(f => {
+      const c = JSON.parse(JSON.stringify(f));
+      const { view, idx } = dragging.current;
+      if (!c.diagram[view] || !c.diagram[view][idx]) return c;
+      if (zone){ c.diagram[view][idx].x = zone.x; c.diagram[view][idx].y = zone.y; }
+      else { c.diagram[view][idx].x = pos.x; c.diagram[view][idx].y = pos.y; }
+      return c;
+    });
+  }
+  function onPointerUp(e){
+    if(!dragging.current) return;
+    try{ svgRef.current.releasePointerCapture(e.pointerId); } catch {}
+    dragging.current = null;
+  }
+
+  function editPin(view, i){
+    const curr = form.diagram?.[view]?.[i]?.label || '';
+    const nxt = prompt('Edit pin label:', curr);
+    if (nxt === null) return;
+    setForm(f=>{ const c=JSON.parse(JSON.stringify(f)); c.diagram[view][i].label = nxt; return c; });
+  }
+  function removePin(view,i){ setForm(f=>{ const c=JSON.parse(JSON.stringify(f)); c.diagram[view].splice(i,1); return c; }); }
+
+  function resetForm(){ setForm(emptyForm()); }
+
+  function saveReport(){
+    const copy = JSON.parse(JSON.stringify(form));
+    if (!copy.id) copy.id = generatePCRId();
+    const next = [copy, ...reports];
+    setReports(next);
+    setForm(emptyForm());
+    alert(`Saved ${copy.id} — remember to export for filing.`);
+  }
+
+  // build SVG string for PDF embedding / print
+  function buildDiagramSVG(report, view){
+    const silhouette = `
+      M100 20 C80 20 65 36 60 60 C56 82 60 104 70 118 C82 132 96 140 100 140 C104 140 118 132 130 118 C140 104 144 82 140 60 C135 36 120 20 100 20
+      M100 140 L100 210
+      M72 150 L56 230
+      M128 150 L144 230
+      M100 210 L86 300
+      M100 210 L114 300
+    `;
+    const pins = (report.diagram && report.diagram[view]) || [];
+    const parts = [];
+    parts.push(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 400' width='300' height='600'>`);
+    parts.push(`<rect width='100%' height='100%' fill='white'/>`);
+    parts.push(`<path d="${silhouette}" stroke="#222" stroke-width="2" fill="none"/>`);
+    pins.forEach(p=>{
+      parts.push(`<circle cx="${p.x}" cy="${p.y}" r="6" fill="#d9534f" stroke="#600" stroke-width="1"/>`);
+      parts.push(`<text x="${p.x+9}" y="${p.y+4}" font-size="10" fill="#222">${escapeXml(p.label)}</text>`);
+    });
+    parts.push(`</svg>`);
+    return parts.join('');
+  }
+
+  function escapeXml(str){
+    return String(str).replace(/[<>&"']/g,c=>{
+      switch(c){ case '<': return '&lt;'; case '>': return '&gt;'; case '&': return '&amp;'; case '"': return '&quot;'; case "'": return '&apos;'; }
+    });
+  }
+
+  function svgToPngDataUrl(svgString, width=600, height=1200){
+    return new Promise(resolve=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,width,height);
+        ctx.drawImage(img,0,0,width,height);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = ()=>{
+        const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const ctx=canvas.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,width,height); resolve(canvas.toDataURL('image/png'));
+      };
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
+    });
+  }
+
+  // Export PDF
+  async function exportPDF(report){
+    const doc = new jsPDF({unit:'pt',format:'letter'});
+    let y = 40;
+    doc.setFontSize(16); doc.text('MedStat EMS - Pierce County, WI', 40, y);
+    doc.setFontSize(10); doc.text(`${report.id || ''}    Date: ${report.date || ''}    Time: ${report.time || ''}`, 360, y);
+    y+=28;
+
+    // Header blocks
+    doc.setFontSize(11); doc.text('Patient Information',40,y); doc.text('Incident & Transport',360,y); y+=14;
+    doc.setFontSize(9);
+    doc.text(`Name: ${report.patientName||''}`,40,y); doc.text(`PT #: ${report.ptNumber||''}`,240,y);
+    doc.text(`Receiving: ${report.receivingFacility==='Other'? report.receivingFacilityOther: report.receivingFacility||''}`,360,y); y+=12;
+    doc.text(`DOB: ${report.dob||''} Age:${report.age||''}`,40,y); doc.text(`Phone: ${report.phone||''}`,240,y);
+    doc.text(`Mode: ${report.transportMode||''} Disp: ${report.disposition||''}`,360,y); y+=16;
+    doc.text(`Address: ${report.address||''} ${report.city||''}, ${report.state||''} ${report.zip||''}`,40,y); y+=22;
+
+    // Times
+    doc.setFontSize(11); doc.text('Incident Times',40,y); y+=14; doc.setFontSize(9);
+    const it = report.incidentTimes || {};
+    const times = [`Dispatch: ${it.dispatch||''}`,'Enroute: '+(it.enroute||''),'On Scene: '+(it.onScene||''),'Pt Contact: '+(it.patientContact||''),'Transport Start: '+(it.transportStart||''),'Arrival: '+(it.arrivalHospital||''),'In Service: '+(it.inService||'')];
+    times.forEach((t,i)=> doc.text(t,40+(i%2)*260,y+Math.floor(i/2)*12));
+    y+=40;
+
+    // Vitals
+    doc.setFontSize(11); doc.text('Vital Signs (serial)',40,y); y+=14; doc.setFontSize(9);
+    if (report.vitalsLog && report.vitalsLog.length){
+      const headers = ['Time','BP','Pulse','Resp','SpO2','Temp','GCS','Notes'];
+      let x=40; headers.forEach(h=>{doc.text(h,x,y); x+=70}); y+=12;
+      report.vitalsLog.forEach(v=>{ let x2=40; [v.time||'',v.bp||'',v.pulse||'',v.resp||'',v.spo2||'',v.temp||'',v.gcs||'',v.notes||''].forEach(c=>{doc.text(String(c),x2,y); x2+=70}); y+=12; if (y>700){doc.addPage(); y=40;} });
+    } else { doc.text('No vitals recorded.',40,y); y+=18; }
+
+    // Meds
+    doc.setFontSize(11); doc.text('Medication Administration',40,y); y+=14; doc.setFontSize(9);
+    if (report.medsLog && report.medsLog.length){
+      const headers = ['Med','Dose','Route','Time','By']; let x=40; headers.forEach(h=>{doc.text(h,x,y); x+=120}); y+=12;
+      report.medsLog.forEach(m=>{ let x2=40; [m.name||'',m.dose||'',m.route||'',m.time||'',m.givenBy||''].forEach(c=>{doc.text(String(c),x2,y); x2+=120}); y+=12; if (y>700){doc.addPage(); y=40;} });
+    } else { doc.text('No medications administered.',40,y); y+=18; }
+
+    // Interventions
+    doc.setFontSize(11); doc.text('Interventions / Procedures',40,y); y+=12; doc.setFontSize(9);
+    if (report.interventions && report.interventions.length) { doc.text(report.interventions.join(', '),40,y); y+=18; } else { doc.text('None recorded.',40,y); y+=18; }
+
+    // Timeline
+    doc.setFontSize(11); doc.text('Treatment / Event Timeline',40,y); y+=12; doc.setFontSize(9);
+    if (report.timeline && report.timeline.length){ report.timeline.forEach(t=>{ doc.text(`${t.time||''} — ${t.event||''} ${t.notes?': '+t.notes:''}`.slice(0,140),40,y); y+=12; if(y>700){doc.addPage(); y=40;} }); } else { doc.text('No timeline events.',40,y); y+=18; }
+
+    // Provider/Outcome
+    doc.setFontSize(11); doc.text('Provider / Outcome',40,y); y+=12; doc.setFontSize(9);
+    doc.text(`Lead: ${report.leadProvider||''} (${report.certification||''})`,40,y); doc.text(`Unit: ${report.unitNumber||''}`,300,y); y+=12;
+    doc.text(`Signature: ${report.providerSignature||''}`,40,y); doc.text(`Outcome: ${report.outcome||''}`,300,y); y+=20;
+
+    // Diagrams embedded
+    const haveFront = report.diagram && report.diagram.front && report.diagram.front.length;
+    const haveBack = report.diagram && report.diagram.back && report.diagram.back.length;
+    if (haveFront || haveBack){
+      doc.setFontSize(11); doc.text('Body Diagram(s)',40,y); y+=12;
+      const promises = [];
+      if (haveFront) promises.push(svgToPngDataUrl(buildDiagramSVG(report,'front'), 300, 600)); else promises.push(Promise.resolve(null));
+      if (haveBack) promises.push(svgToPngDataUrl(buildDiagramSVG(report,'back'), 300, 600)); else promises.push(Promise.resolve(null));
+      const imgs = await Promise.all(promises);
+      if (imgs[0]) doc.addImage(imgs[0],'PNG',40,y,250,420);
+      if (imgs[1]) doc.addImage(imgs[1],'PNG',320,y,250,420);
+      y+=440;
+    }
+
+    // Narrative
+    doc.setFontSize(11); doc.text('Narrative / Notes',40,y); y+=12; doc.setFontSize(9);
+    const narrative = report.narrative || '';
+    const split = doc.splitTextToSize(narrative, 500);
+    doc.text(split,40,y);
+
+    // Footer
+    doc.setFontSize(8); doc.text(`${report.id || ''} — Exported ${new Date().toLocaleString()}`,40,780);
+
+    doc.save(`${report.id || 'PCR'}.pdf`);
+  }
+
+  function openPrintView(report){
+    const win = window.open('', '_blank');
+    const frontSvg = buildDiagramSVG(report,'front');
+    const backSvg = buildDiagramSVG(report,'back');
+    const html = `
+      <html><head><title>${report.id || 'PCR'} - Print View</title>
+      <style>body{font-family:Arial,Helvetica,sans-serif;margin:18px;color:#222} .section{border:1px solid #e6e6e6;padding:10px;margin-bottom:10px} table{width:100%;border-collapse:collapse} th,td{border:1px solid #eee;padding:6px;font-size:13px}</style>
+      </head><body>
+      <h2>MedStat EMS - Pierce County, WI</h2>
+      <div style="display:flex;justify-content:space-between"><div>PCR ID: ${report.id||''}</div><div>Date: ${report.date||''} Time: ${report.time||''}</div></div>
+      <div class="section">
+        <h4>Patient</h4>
+        <div>Name: ${report.patientName||''}</div>
+        <div>DOB: ${report.dob||''} Age: ${report.age||''}</div>
+        <div>Phone: ${report.phone||''}</div>
+        <div>Address: ${report.address||''} ${report.city||''}, ${report.state||''} ${report.zip||''}</div>
+      </div>
+      <div class="section"><h4>Incident Times</h4>
+        <table><tr><th>Dispatch</th><th>Enroute</th><th>On Scene</th><th>Pt Contact</th><th>Transport Start</th><th>Arrival</th><th>In Service</th></tr>
+        <tr><td>${report.incidentTimes.dispatch||''}</td><td>${report.incidentTimes.enroute||''}</td><td>${report.incidentTimes.onScene||''}</td><td>${report.incidentTimes.patientContact||''}</td><td>${report.incidentTimes.transportStart||''}</td><td>${report.incidentTimes.arrivalHospital||''}</td><td>${report.incidentTimes.inService||''}</td></tr></table>
+      </div>
+      <div class="section"><h4>Vitals</h4>${renderVitalsHtml(report.vitalsLog)}</div>
+      <div class="section"><h4>Medication Administration</h4>${renderMedsHtml(report.medsLog)}</div>
+      <div class="section" style="display:flex;gap:12px">
+        <div style="flex:1"><h4>Interventions</h4><div>${(report.interventions||[]).join(', ')||'None'}</div><h4 style="margin-top:8px">Timeline</h4>${renderTimelineHtml(report.timeline)}</div>
+        <div style="flex:1"><h4>Diagrams</h4><div style="display:flex;gap:12px"><div>${frontSvg}</div><div>${backSvg}</div></div></div>
+      </div>
+      <div class="section"><h4>Narrative</h4><div style="white-space:pre-wrap">${escapeXml(report.narrative||'')}</div></div>
+      <div class="section"><h4>Provider</h4><div>Lead: ${report.leadProvider||''} (${report.certification||''})</div><div>Unit: ${report.unitNumber||''}</div><div>Signature: ${report.providerSignature||''}</div><div>Outcome: ${report.outcome||''}</div></div>
+      </body></html>
+    `;
+    win.document.write(html);
+    win.document.close();
+  }
+
+  function renderVitalsHtml(vitals){
+    if (!vitals || !vitals.length) return '<div>No vitals recorded.</div>';
+    let html = '<table><tr><th>Time</th><th>BP</th><th>Pulse</th><th>Resp</th><th>SpO2</th><th>Temp</th><th>GCS</th><th>Notes</th></tr>';
+    vitals.forEach(v=> html+= `<tr><td>${v.time||''}</td><td>${v.bp||''}</td><td>${v.pulse||''}</td><td>${v.resp||''}</td><td>${v.spo2||''}</td><td>${v.temp||''}</td><td>${v.gcs||''}</td><td>${escapeXml(v.notes||'')}</td></tr>`);
+    html += '</table>'; return html;
+  }
+  function renderMedsHtml(meds){
+    if (!meds || !meds.length) return '<div>No medications administered.</div>';
+    let html = '<table><tr><th>Medication</th><th>Dose</th><th>Route</th><th>Time</th><th>By</th></tr>';
+    meds.forEach(m=> html+= `<tr><td>${m.name||''}</td><td>${m.dose||''}</td><td>${m.route||''}</td><td>${m.time||''}</td><td>${m.givenBy||''}</td></tr>`);
+    html += '</table>'; return html;
+  }
+  function renderTimelineHtml(tl){ if(!tl||!tl.length) return '<div>No timeline events.</div>'; let html='<table><tr><th>Time</th><th>Event</th><th>Notes</th></tr>'; tl.forEach(t=> html+=`<tr><td>${t.time||''}</td><td>${t.event||''}</td><td>${escapeXml(t.notes||'')}</td></tr>`); html += '</table>'; return html; }
+
+  // saved reports handlers
+  function loadReport(i){ setForm(JSON.parse(JSON.stringify(reports[i]||emptyForm()))); window.scrollTo({top:0,behavior:'smooth'}); }
+  function deleteReport(i){
+    if(!confirm('Delete this report?')) return;
+    const next = reports.filter((_,j)=>j!==i);
+    setReports(next);
+  }
+  function assignId(){ const id = generatePCRId(); updateField('id', id); alert('Assigned '+id); }
+
+  // small UI helpers
+  const filtered = reports.filter(r=>{
+    if(!filter) return true;
+    const q = filter.toLowerCase();
+    return (r.patientName||'').toLowerCase().includes(q) || (r.id||'').toLowerCase().includes(q) || (r.ptNumber||'').toLowerCase().includes(q);
+  });
+
+  return (
+    <div className="wrap">
+      <div className="notice">
+        <strong>NOTICE:</strong> All reports must be <strong>exported (PDF)</strong> to be filed. LocalStorage is for draft storage only — export and archive each PCR after saving.
+      </div>
+
+      <div className="app-header card">
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div>
+            <h2 style={{margin:0}}>MedStat EMS — Pierce County (Roblox) PCR</h2>
+            <div className="muted small">Zoll/Epic-style ePCR simulation — full clinical flow</div>
+          </div>
+          <div className="tiny">Local Storage — Export to file for official records</div>
+        </div>
+      </div>
+
+      <div className="grid cols-3">
+        <div className="card">
+          <h3>Demographics & Incident</h3>
+          <div className="row" style={{flexWrap:'wrap',gap:8}}>
+            <input className="small" placeholder="PT #" value={form.ptNumber} onChange={e=>updateField('ptNumber',e.target.value)} />
+            <input className="small" placeholder="Patient Name" value={form.patientName} onChange={e=>updateField('patientName',e.target.value)} style={{flex:1}} />
+            <input className="small" placeholder="Gender" value={form.gender} onChange={e=>updateField('gender',e.target.value)} />
+            <input className="small" placeholder="DOB" value={form.dob} onChange={e=>updateField('dob',e.target.value)} />
+          </div>
+
+          <div style={{marginTop:10}} className="row">
+            <input placeholder="Age" value={form.age} onChange={e=>updateField('age',e.target.value)} />
+            <input placeholder="Ht" value={form.height} onChange={e=>updateField('height',e.target.value)} />
+            <input placeholder="Wt" value={form.weight} onChange={e=>updateField('weight',e.target.value)} />
+          </div>
+
+          <div style={{marginTop:10}}>
+            <input placeholder="Chief Complaint" value={form.chiefComplaint} onChange={e=>updateField('chiefComplaint',e.target.value)} style={{width:'100%'}} />
+          </div>
+
+          <div style={{marginTop:10}} className="row">
+            <input placeholder="Address" value={form.address} onChange={e=>updateField('address',e.target.value)} style={{flex:1}} />
+            <input placeholder="City" value={form.city} onChange={e=>updateField('city',e.target.value)} />
+            <input placeholder="State" value={form.state} onChange={e=>updateField('state',e.target.value)} />
+            <input placeholder="Zip" value={form.zip} onChange={e=>updateField('zip',e.target.value)} />
+          </div>
+
+          <div style={{marginTop:12}}>
+            <h4 className="small">Incident Times</h4>
+            <div className="row" style={{flexWrap:'wrap',gap:6}}>
+              <div><label className="tiny">Dispatch</label><div className="row"><input value={form.incidentTimes.dispatch} onChange={e=>updateNested('incidentTimes.dispatch', e.target.value)} /><button className="btn btn-gray small" onClick={()=>updateNested('incidentTimes.dispatch', nowTime())}>Now</button></div></div>
+              <div><label className="tiny">Enroute</label><div className="row"><input value={form.incidentTimes.enroute} onChange={e=>updateNested('incidentTimes.enroute', e.target.value)} /><button className="btn btn-gray small" onClick={()=>updateNested('incidentTimes.enroute', nowTime())}>Now</button></div></div>
+              <div><label className="tiny">On Scene</label><div className="row"><input value={form.incidentTimes.onScene} onChange={e=>updateNested('incidentTimes.onScene', e.target.value)} /><button className="btn btn-gray small" onClick={()=>updateNested('incidentTimes.onScene', nowTime())}>Now</button></div></div>
+            </div>
+
+            <div className="row" style={{marginTop:8}}>
+              <div><label className="tiny">Pt Contact</label><div className="row"><input value={form.incidentTimes.patientContact} onChange={e=>updateNested('incidentTimes.patientContact', e.target.value)} /><button className="btn btn-gray small" onClick={()=>updateNested('incidentTimes.patientContact', nowTime())}>Now</button></div></div>
+              <div><label className="tiny">Transport Start</label><div className="row"><input value={form.incidentTimes.transportStart} onChange={e=>updateNested('incidentTimes.transportStart', e.target.value)} /><button className="btn btn-gray small" onClick={()=>updateNested('incidentTimes.transportStart', nowTime())}>Now</button></div></div>
+              <div><label className="tiny">Arrival</label><div className="row"><input value={form.incidentTimes.arrivalHospital} onChange={e=>updateNested('incidentTimes.arrivalHospital', e.target.value)} /><button className="btn btn-gray small" onClick={()=>updateNested('incidentTimes.arrivalHospital', nowTime())}>Now</button></div></div>
+            </div>
+
+            <div style={{marginTop:8}}>
+              <label className="tiny">In Service / Clear</label>
+              <div className="row"><input value={form.incidentTimes.inService} onChange={e=>updateNested('incidentTimes.inService', e.target.value)} /><button className="btn btn-gray small" onClick={()=>updateNested('incidentTimes.inService', nowTime())}>Now</button></div>
+            </div>
+          </div>
+
+          <div style={{marginTop:12}}>
+            <h4 className="small">Vitals (serial)</h4>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div className="muted small">Add multiple vitals sets</div>
+              <button className="btn btn-green" onClick={addVitals}>Add Vitals</button>
+            </div>
+            <div className="list-scroll" style={{marginTop:8}}>
+              {form.vitalsLog && form.vitalsLog.length ? form.vitalsLog.map((v,i)=>(
+                <div key={i} style={{display:'grid',gridTemplateColumns:'repeat(8,1fr)',gap:6,alignItems:'center',marginBottom:6}}>
+                  <input value={v.time} onChange={e=>updateVitals(i,'time',e.target.value)} />
+                  <input value={v.bp} onChange={e=>updateVitals(i,'bp',e.target.value)} placeholder="BP" />
+                  <input value={v.pulse} onChange={e=>updateVitals(i,'pulse',e.target.value)} placeholder="Pulse" />
+                  <input value={v.resp} onChange={e=>updateVitals(i,'resp',e.target.value)} placeholder="Resp" />
+                  <input value={v.spo2} onChange={e=>updateVitals(i,'spo2',e.target.value)} placeholder="SpO2" />
+                  <input value={v.temp} onChange={e=>updateVitals(i,'temp',e.target.value)} placeholder="Temp" />
+                  <input value={v.gcs} onChange={e=>updateVitals(i,'gcs',e.target.value)} placeholder="GCS" />
+                  <div style={{display:'flex',gap:6}}><input value={v.notes} onChange={e=>updateVitals(i,'notes',e.target.value)} placeholder="Notes" /><button className="btn btn-red" onClick={()=>delVitals(i)}>Del</button></div>
+                </div>
+              )) : <div className="muted small">No vitals recorded.</div>}
+            </div>
+          </div>
+
+          <div style={{marginTop:12}}>
+            <h4 className="small">Medication Admin Log</h4>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div className="muted small">Preloaded meds available</div>
+              <button className="btn btn-green" onClick={addMed}>Add Medication</button>
+            </div>
+            <div className="list-scroll" style={{marginTop:8}}>
+              {form.medsLog && form.medsLog.length ? form.medsLog.map((m,i)=>(
+                <div key={i} style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr 1fr auto',gap:6,alignItems:'center',marginBottom:6}}>
+                  <select value={m.name} onChange={e=>updateMed(i,'name',e.target.value)}>
+                    <option value="">-- Medication --</option>
+                    {PRELOADED_MEDS.map(md=> <option key={md} value={md}>{md}</option>)}
+                    <option value="Other">Other</option>
+                  </select>
+                  <input value={m.dose} onChange={e=>updateMed(i,'dose',e.target.value)} placeholder="Dose" />
+                  <select value={m.route} onChange={e=>updateMed(i,'route',e.target.value)}>
+                    <option value="IV">IV</option><option value="IO">IO</option><option value="IM">IM</option><option value="IN">IN</option><option value="PO">PO</option><option value="Other">Other</option>
+                  </select>
+                  <input value={m.time} onChange={e=>updateMed(i,'time',e.target.value)} placeholder="Time" />
+                  <div style={{display:'flex',gap:6}}><input value={m.givenBy} onChange={e=>updateMed(i,'givenBy',e.target.value)} placeholder="By" /><button className="btn btn-red" onClick={()=>delMed(i)}>Del</button></div>
+                </div>
+              )) : <div className="muted small">No medications administered.</div>}
+            </div>
+          </div>
+
+          <div style={{marginTop:12}}>
+            <h4 className="small">Interventions</h4>
+            <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+              {['Oxygen Administered','Airway Adjunct (OPA/NPA)','BVM Ventilation','CPR / Defibrillation','IV / IO Access','Medication Administration','Bandaging / Splinting','Spinal Immobilization','Other'].map(it=>(
+                <label key={it} style={{display:'flex',alignItems:'center',gap:6}}><input type="checkbox" checked={form.interventions.includes(it)} onChange={()=>toggleInterv(it)} /> <span className="small">{it}</span></label>
+              ))}
+            </div>
+          </div>
+
+          <div style={{marginTop:12}}>
+            <h4 className="small">Treatment / Event Timeline</h4>
+            <div style={{display:'flex',justifyContent:'space-between'}}><div className="muted small">Chronological events</div><button className="btn btn-green" onClick={addEvent}>Add Event</button></div>
+            <div className="list-scroll" style={{marginTop:8}}>
+              {form.timeline && form.timeline.length ? form.timeline.map((t,i)=>(
+                <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 2fr 1fr',gap:6,alignItems:'center',marginBottom:6}}>
+                  <input value={t.time} onChange={e=>updateEvent(i,'time',e.target.value)} />
+                  <input value={t.event} onChange={e=>updateEvent(i,'event',e.target.value)} placeholder="Event" />
+                  <div style={{display:'flex',gap:6}}><input value={t.notes} onChange={e=>updateEvent(i,'notes',e.target.value)} placeholder="Notes" /><button className="btn btn-red" onClick={()=>delEvent(i)}>Del</button></div>
+                </div>
+              )) : <div className="muted small">No timeline events.</div>}
+            </div>
+          </div>
+
+          <div style={{marginTop:12}}>
+            <h4 className="small">Narrative / Notes</h4>
+            <textarea value={form.narrative} onChange={e=>updateField('narrative',e.target.value)} style={{width:'100%'}} />
+          </div>
+
+        </div>
+
+        <div className="card">
+          <h3>Diagram & Controls</h3>
+
+          <div className="row" style={{marginBottom:8}}>
+            <div className="row" style={{gap:6}}>
+              <button className={`btn ${diagramView==='front'?'btn-primary':''}`} onClick={()=>setDiagramView('front')}>Front</button>
+              <button className={`btn ${diagramView==='back'?'btn-primary':''}`} onClick={()=>setDiagramView('back')}>Back</button>
+            </div>
+            <div style={{marginLeft:'auto'}} className="tiny muted">Click silhouette to add pin (zone snaps). Drag to reposition.</div>
+          </div>
+
+          <div className="svg-wrap">
+            <div className="svg-box">
+              <svg ref={svgRef} viewBox="0 0 200 400" width="220" height="440"
+                   onClick={handleDiagramClick}
+                   onPointerMove={onPointerMove}
+                   onPointerUp={onPointerUp}
+                   style={{touchAction:'none',display:'block'}}>
+                <path d={
+                  `M100 20 C80 20 65 36 60 60 C56 82 60 104 70 118 C82 132 96 140 100 140 C104 140 118 132 130 118 C140 104 144 82 140 60 C135 36 120 20 100 20
+                   M100 140 L100 210
+                   M72 150 L56 230
+                   M128 150 L144 230
+                   M100 210 L86 300
+                   M100 210 L114 300`
+                } stroke="#222" strokeWidth="2" fill="none" />
+                {/* faint zone outlines (guides) */}
+                {ZONES.map(z=> <circle key={z.id} cx={z.x} cy={z.y} r={z.r} fill="none" stroke="#f1f5f9" strokeWidth="1" />)}
+                {(form.diagram && form.diagram[diagramView] || []).map((p,i)=>(
+                  <g key={i}>
+                    <circle cx={p.x} cy={p.y} r={6} fill="#d9534f" stroke="#600" onPointerDown={(e)=>onPinPointerDown(e, diagramView, i)} style={{touchAction:'none',cursor:'grab'}} />
+                    <text x={p.x+9} y={p.y+4} fontSize="9" fill="#222">{p.label}</text>
+                  </g>
+                ))}
+              </svg>
+            </div>
+
+            <div style={{flex:1}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div><strong>Pins ({diagramView})</strong></div>
+                <div className="tiny muted">Edit labels or remove pins</div>
+              </div>
+              <div className="list-scroll" style={{marginTop:8}}>
+                {(form.diagram && form.diagram[diagramView] && form.diagram[diagramView].length) ? form.diagram[diagramView].map((p,i)=>(
+                  <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:6,border:'1px solid #eef2f7',borderRadius:6,marginBottom:6}}>
+                    <div className="small">{p.label} — ({Math.round(p.x)},{Math.round(p.y)})</div>
+                    <div style={{display:'flex',gap:6}}>
+                      <button className="btn btn-gray" onClick={()=>editPin(diagramView,i)}>Edit</button>
+                      <button className="btn btn-red" onClick={()=>removePin(diagramView,i)}>Del</button>
+                    </div>
+                  </div>
+                )) : <div className="muted small">No pins yet — click silhouette to add one.</div>}
+              </div>
+
+              <div style={{marginTop:10,display:'flex',gap:8}}>
+                <button className="btn btn-gray" onClick={()=>{ const svg=buildDiagramSVG(form,diagramView); const w=window.open(); w.document.write(svg); }}>Open SVG</button>
+                <button className="btn btn-red" onClick={()=>setForm(f=>{ const c=JSON.parse(JSON.stringify(f)); c.diagram[diagramView]=[]; return c; })}>Clear Pins</button>
+              </div>
+
+              <hr style={{margin:'12px 0'}} />
+
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                <div style={{display:'flex',gap:8}}>
+                  <button className="btn btn-primary" onClick={assignId}>Generate ID</button>
+                  <button className="btn btn-green" onClick={saveReport}>Save Report</button>
+                  <button className="btn btn-gray" onClick={resetForm}>Reset Form</button>
+                </div>
+
+                <div style={{display:'flex',gap:8}}>
+                  <input placeholder="Filter reports by name/ID" value={filter} onChange={e=>setFilter(e.target.value)} style={{flex:1}} />
+                  <button className="btn btn-primary" onClick={()=>openPrintView(form)}>Print View (current)</button>
+                  <button className="btn btn-primary" onClick={()=>exportPDF(form)}>Export PDF (current)</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{marginTop:10}}>
+            <h4 className="small">Receiving Facility & Transport</h4>
+            <select value={form.receivingFacility} onChange={e=>updateField('receivingFacility', e.target.value)} style={{width:'100%'}}>
+              <option value="">-- Select Facility --</option>
+              {PRELOADED_HOSPITALS.map(h=> <option key={h} value={h}>{h}</option>)}
+            </select>
+            {form.receivingFacility === 'Other' && <input placeholder="Other facility" value={form.receivingFacilityOther} onChange={e=>updateField('receivingFacilityOther', e.target.value)} style={{width:'100%',marginTop:6}} />}
+            <div style={{marginTop:8}}>
+              <label className="tiny">Transport Mode</label>
+              <select value={form.transportMode} onChange={e=>updateField('transportMode', e.target.value)} style={{width:'100%'}}>
+                <option value="">-- Mode --</option>
+                <option>Ambulance - Emergency (L/S)</option>
+                <option>Ambulance - Non-Emergency</option>
+                <option>Air Transport</option>
+                <option>No Transport</option>
+              </select>
+            </div>
+            <div style={{marginTop:8}}>
+              <label className="tiny">Patient Disposition</label>
+              <select value={form.disposition} onChange={e=>updateField('disposition', e.target.value)} style={{width:'100%'}}>
+                <option value="">-- Disposition --</option>
+                <option>Transported</option><option>Refused Care</option><option>Treated & Released</option><option>Cancelled</option><option>DOA</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{marginTop:12}}>
+            <h4 className="small">Provider / Crew</h4>
+            <input placeholder="Lead Provider" value={form.leadProvider} onChange={e=>updateField('leadProvider',e.target.value)} style={{width:'100%',marginBottom:6}} />
+            <select value={form.certification} onChange={e=>updateField('certification',e.target.value)} style={{width:'100%',marginBottom:6}}>
+              <option value="">-- Cert Level --</option><option>EMT</option><option>AEMT</option><option>Paramedic</option><option>RN</option><option>MD</option>
+            </select>
+            <input placeholder="Partner(s)" value={form.partners} onChange={e=>updateField('partners',e.target.value)} style={{width:'100%',marginBottom:6}} />
+            <input placeholder="Unit #" value={form.unitNumber} onChange={e=>updateField('unitNumber',e.target.value)} style={{width:'100%',marginBottom:6}} />
+            <input placeholder="Signature (typed full name)" value={form.providerSignature} onChange={e=>updateField('providerSignature',e.target.value)} style={{width:'100%'}} />
+            <div style={{marginTop:8}}>
+              <label className="tiny">Patient Outcome</label>
+              <select value={form.outcome} onChange={e=>updateField('outcome',e.target.value)} style={{width:'100%'}}>
+                <option value="">-- Outcome --</option>
+                <option>Stable</option><option>Critical</option><option>Deceased on Arrival (DOA)</option><option>Improved</option><option>Unchanged</option><option>Other</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{marginTop:12}}>
+            <h4 className="small">Saved Reports</h4>
+            <div className="list-scroll" style={{marginTop:6}}>
+              {filtered.length ? filtered.map((r,i)=>(
+                <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:8,border:'1px solid #eef2f7',borderRadius:6,marginBottom:8}}>
+                  <div>
+                    <div style={{fontWeight:600}}>{r.id}</div>
+                    <div className="tiny">{r.date} — {r.patientName || 'Unnamed'}</div>
+                  </div>
+                  <div style={{display:'flex',gap:6}}>
+                    <button className="btn btn-gray" onClick={()=>loadReport(reports.indexOf(r))}>Edit</button>
+                    <button className="btn btn-primary" onClick={()=>exportPDF(r)}>Export</button>
+                    <button className="btn btn-gray" onClick={()=>openPrintView(r)}>Print View</button>
+                    <button className="btn btn-red" onClick={()=>deleteReport(reports.indexOf(r))}>Del</button>
+                  </div>
+                </div>
+              )) : <div className="muted small">No saved reports.</div>}
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+
+  </script>
+</body>
+</html>
