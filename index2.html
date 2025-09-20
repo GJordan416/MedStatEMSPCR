@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MedStat EMS — Pierce County PCR</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <style>
+    :root{--blue:#0b5ed7;--muted:#6b7280}
+    body{font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background:#f3f4f6; margin:0}
+    .wrap{max-width:1200px;margin:18px auto;padding:18px}
+    header.notice{background:#fff3cd;border:1px solid #ffeeba;padding:12px;border-radius:6px;color:#856404;margin-bottom:14px}
+    .app-header{background:var(--blue);color:white;padding:14px;border-radius:6px;margin-bottom:12px;display:flex;align-items:center;gap:12px}
+    .app-header img{height:48px;border-radius:6px}
+    .grid{display:grid;gap:12px}
+    .cols-3{grid-template-columns:2fr 1fr}
+    .card{background:white;border-radius:8px;padding:12px;box-shadow:0 1px 3px rgba(0,0,0,0.06)}
+    input, textarea, select, button{font:inherit}
+    textarea{min-height:80px}
+    .tiny{font-size:12px;color:#374151}
+    .muted{color:var(--muted)}
+    .btn{padding:8px 10px;border-radius:6px;border:0;cursor:pointer}
+    .btn-primary{background:var(--blue);color:white}
+    .btn-green{background:#16a34a;color:white}
+    .btn-red{background:#dc2626;color:white}
+    .btn-gray{background:#e5e7eb}
+    .list-scroll{max-height:260px;overflow:auto}
+    .diagram-wrap{display:flex;gap:12px;align-items:flex-start}
+    .diagram-box{border:1px dashed #e6e7ea;padding:8px;border-radius:6px;background:white}
+    .cheatsheet{background:#0f172a;color:white;padding:12px;border-radius:8px}
+    .cheat-toggle{background:#0b5ed7;color:white;padding:8px;border-radius:6px;border:0;cursor:pointer}
+    .small{font-size:13px}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th,td{border:1px solid #e5e7eb;padding:6px;text-align:left}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="notice" role="note">
+      <strong>NOTICE:</strong> All reports must be <strong>exported (PDF)</strong> to be filed. LocalStorage is for draft storage only — export and archive each PCR after saving.
+    </div>
+
+    <header class="app-header card">
+      <!-- Embedded Base64 logo (embedded from your uploaded image) -->
+      <img src="data:image/jpeg;base64,JbpqGoWlm9w2yFbiZYzI3ooYjJ9hk1lhc6xmGp+yg7rzLxOSYPEVPaTVj53+BP7D...BRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAf/9k=" alt="MedStat EMS Logo">
+      <div>
+        <h1 style="margin:0">MedStat EMS — Pierce County (Roblox) PCR</h1>
+        <div class="tiny muted">Zoll/Epic-style ePCR simulation — clinical demo</div>
+      </div>
+    </header>
+
+    <div class="grid cols-3">
+      <div class="card">
+        <h2 style="margin-top:0">Patient Care Report</h2>
+        <form id="pcrForm">
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
+            <div><label class="small">Date</label><br/><input type="date" name="Date" /></div>
+            <div><label class="small">Time</label><br/><input type="time" name="Time" /></div>
+            <div><label class="small">PT #</label><br/><input name="PTNumber" /></div>
+            <div><label class="small">Patient Name</label><br/><input name="PatientName" /></div>
+            <div><label class="small">Gender</label><br/><select name="Gender"><option></option><option>Male</option><option>Female</option><option>Other</option></select></div>
+            <div><label class="small">Phone #</label><br/><input name="Phone" /></div>
+            <div><label class="small">SSN</label><br/><input name="SSN" /></div>
+            <div><label class="small">DOB</label><br/><input type="date" name="DOB" /></div>
+            <div><label class="small">Age</label><br/><input name="Age" /></div>
+            <div><label class="small">Ht</label><br/><input name="Ht" /></div>
+            <div><label class="small">Wt</label><br/><input name="Wt" /></div>
+            <div><label class="small">Chief Complaint</label><br/><input name="ChiefComplaint" /></div>
+            <div><label class="small">LOC</label><br/><input name="LOC" /></div>
+            <div><label class="small">Temp</label><br/><input name="Temp" /></div>
+            <div><label class="small">Pulse</label><br/><input name="Pulse" /></div>
+            <div><label class="small">BP</label><br/><input name="BP" /></div>
+            <div><label class="small">Respirations</label><br/><input name="Resp" /></div>
+            <div><label class="small">Pupils</label><br/><input name="Pupils" /></div>
+            <div><label class="small">Lung Sounds</label><br/><input name="LungSounds" /></div>
+            <div><label class="small">EKG</label><br/><input name="EKG" /></div>
+            <div style="grid-column:span 2"><label class="small">Address of Incident (Address, City, State, Zip)</label><br/><input name="Address" placeholder="Street" style="margin-bottom:6px" /><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px"><input name="City" placeholder="City" /><input name="State" placeholder="State" /><input name="Zip" placeholder="Zip" /></div></div>
+            <div style="grid-column:span 2"><label class="small">Other Pertinent Physical Findings</label><br/><input name="OtherFindings" /></div>
+            <div style="grid-column:span 2"><label class="small">Medications (patient's meds)</label><br/><input name="PtMeds" placeholder="List home medications" /></div>
+            <div><label class="small">Allergies</label><br/><input name="Allergies" /></div>
+            <div><label class="small">Medical History</label><br/><input name="MedHistory" /></div>
+            <div><label class="small">Doctor</label><br/><input name="Doctor" /></div>
+            <div><label class="small">Doctor Phone</label><br/><input name="DoctorPhone" /></div>
+            <div style="grid-column:span 2"><label class="small">Notes / Narrative</label><br/><textarea name="Narrative"></textarea></div>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">Diagram & Logs</h3>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <button id="frontBtn" class="btn btn-primary">Front</button>
+          <button id="backBtn" class="btn btn-gray">Back</button>
+          <div style="margin-left:auto" class="tiny muted">Click to add a pin. Drag pins to reposition.</div>
+        </div>
+
+        <div class="diagram-wrap">
+          <div class="diagram-box">
+            <svg id="diagramSVG" viewBox="0 0 200 400" width="220" height="440" style="touch-action:none;border-radius:6px;display:block">
+              <path id="silhouette" d="M100 20 C80 20 65 36 60 60 C56 82 60 104 70 118 C82 132 96 140 100 140 C104 140 118 132 130 118 C140 104 144 82 140 60 C135 36 120 20 100 20 M100 140 L100 210 M72 150 L56 230 M128 150 L144 230 M100 210 L86 300 M100 210 L114 300" stroke="#222" stroke-width="2" fill="none"/>
+            </svg>
+          </div>
+          <div style="flex:1">
+            <div style="display:flex;justify-content:space-between;align-items:center"><div><strong>Pins (current view)</strong></div><div class="muted small">Edit labels or remove pins</div></div>
+            <div id="pinList" class="list-scroll" style="margin-top:8px"></div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button id="clearPins" class="btn btn-red">Clear Pins</button>
+              <button id="openSVG" class="btn btn-gray">Open SVG</button>
+            </div>
+            <hr style="margin:12px 0"/>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;gap:8px">
+                <button id="genId" class="btn btn-primary">Generate ID</button>
+                <button id="saveBtn" class="btn btn-green">Save Report</button>
+                <button id="resetBtn" class="btn btn-gray">Reset Form</button>
+              </div>
+              <div style="display:flex;gap:8px">
+                <input id="filterInput" placeholder="Filter saved reports by name/ID" style="flex:1;padding:8px;border-radius:6px;border:1px solid #e6e7ea" />
+                <button id="printViewBtn" class="btn btn-primary">Open Print View</button>
+                <button id="exportCurrentBtn" class="btn btn-primary">Export PDF</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <hr style="margin:12px 0"/>
+        <h4 style="margin:6px 0">Medication / Treatments</h4>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center">
+          <input id="medInput" placeholder="Medication name, dose, route" />
+          <button id="addMedBtn" class="btn btn-green">Add Med</button>
+          <input id="treatInput" placeholder="Treatment / intervention" />
+          <button id="addTreatBtn" class="btn btn-green">Add Treatment</button>
+        </div>
+
+        <div style="display:flex;gap:12px;margin-top:8px">
+          <div style="flex:1"><strong>Med Log</strong><div id="medLog" class="list-scroll" style="margin-top:6px"></div></div>
+          <div style="flex:1"><strong>Treatment Log</strong><div id="treatLog" class="list-scroll" style="margin-top:6px"></div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">Saved Reports</h3>
+        <div style="display:flex;gap:8px">
+          <button id="exportAllBtn" class="btn btn-primary">Export Selected</button>
+          <button id="deleteBtn" class="btn btn-red">Delete Selected</button>
+        </div>
+        <div style="margin-top:8px"><input id="reportsFilter" placeholder="Search reports..." style="width:100%;padding:8px;border-radius:6px;border:1px solid #e6e7ea" /></div>
+        <div id="reportsList" class="list-scroll" style="margin-top:8px"></div>
+        <hr style="margin:12px 0"/>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button id="cheatToggle" class="cheat-toggle">Toggle Cheat Sheet</button>
+          <div class="muted small">In-app reference only — not included in exports</div>
+        </div>
+        <div id="cheatSheet" class="cheatsheet" style="margin-top:10px;display:none">
+          <h4 style="margin:0 0 8px 0">PCR Cheat Sheet (in-app only)</h4>
+          <ul style="margin:0 0 8px 18px">
+            <li><strong>Date/Time:</strong> Document call start (dispatch/time stamps in incident times).</li>
+            <li><strong>LOC:</strong> A (Alert), V (Verbal), P (Pain), U (Unresponsive).</li>
+            <li><strong>Vitals:</strong> Document serial vitals (Time, BP, Pulse, Resp, SpO2, Temp, GCS).</li>
+            <li><strong>EKG:</strong> Rhythm & findings; attach if available.</li>
+            <li><strong>Med Log:</strong> Medication, dose, route, time, provider initials (use med log section).</li>
+            <li><strong>Interventions:</strong> Airway, O2, IV/IO, CPR/Defib, Splinting, Spinal immobilization.</li>
+            <li><strong>Notes/Narrative:</strong> Chronological events, response to treatments, patient complaints, mechanism of injury.</li>
+            <li><strong>Diagram:</strong> Place pins with labels for injuries/marks; pins are saved with the report and embedded in PDF.</li>
+            <li><strong>Signature:</strong> Type full provider name in the Provider section.</li>
+            <li><strong>Export:</strong> After saving, export PDF and archive — localStorage is only a draft store.</li>
+          </ul>
+          <div style="font-size:12px" class="muted">Keep narratives factual and objective (who, what, when, where, what you saw, what you did, patient response).</div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="tiny muted" style="text-align:center;margin-top:12px">MedStat EMS — Pierce County (Roblox) • Clinical demo</footer>
+  </div>
+
+<script>
+(function(){
+  const LS_KEY = 'medstat_pcr_reports_v1';
+  const form = document.getElementById('pcrForm');
+  const diagramSVG = document.getElementById('diagramSVG');
+  const pinList = document.getElementById('pinList');
+  const medLog = document.getElementById('medLog');
+  const treatLog = document.getElementById('treatLog');
+  const reportsList = document.getElementById('reportsList');
+
+  let reports = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+  let current = createEmptyReport();
+  let view = 'front';
+
+  const ZONES = [
+    { id:'head', name:'Head', x:100, y:40, r:30 },
+    { id:'neck', name:'Neck', x:100, y:70, r:16 },
+    { id:'chest', name:'Chest', x:100, y:120, r:40 },
+    { id:'abdomen', name:'Abdomen', x:100, y:180, r:36 },
+    { id:'pelvis', name:'Pelvis', x:100, y:235, r:30 },
+    { id:'l_arm', name:'Left Arm', x:60, y:140, r:28 },
+    { id:'r_arm', name:'Right Arm', x:140, y:140, r:28 },
+    { id:'l_leg', name:'Left Leg', x:85, y:310, r:36 },
+    { id:'r_leg', name:'Right Leg', x:115, y:310, r:36 }
+  ];
+
+  function createEmptyReport(){ return { id:'', Date:new Date().toISOString().slice(0,10), Time:(new Date()).toTimeString().slice(0,5), PTNumber:'', PatientName:'', Gender:'', Address:'', City:'', State:'', Zip:'', Phone:'', SSN:'', DOB:'', Age:'', Ht:'', Wt:'', ChiefComplaint:'', LOC:'', Temp:'', Pulse:'', BP:'', Resp:'', Pupils:'', LungSounds:'', EKG:'', OtherFindings:'', PtMeds:'', Allergies:'', MedHistory:'', Doctor:'', DoctorPhone:'', Narrative:'', incidentTimes:{dispatch:'',enroute:'',onScene:'',patientContact:'',transportStart:'',arrivalHospital:'',inService:''}, vitals:[], meds:[], treatments:[], interventions:[], timeline:[], receivingFacility:'', transportMode:'', disposition:'', leadProvider:'', certification:'', partners:'', unitNumber:'', providerSignature:'', outcome:'', diagram:{front:[],back:[]} }; }
+
+  function generateId(){ const year = (new Date()).getFullYear(); const key = 'pcr_counter_' + year; const raw = localStorage.getItem(key); const next = raw ? parseInt(raw,10)+1 : 1; localStorage.setItem(key, String(next)); return 'PCR-' + year + '-' + String(next).padStart(4,'0'); }
+
+  function svgPoint(e){ const pt = diagramSVG.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY; const loc = pt.matrixTransform(diagramSVG.getScreenCTM().inverse()); return { x: Number(loc.x.toFixed(1)), y: Number(loc.y.toFixed(1)) }; }
+
+  function findZone(x,y){ for(const z of ZONES){ const dx = x - z.x, dy = y - z.y; if(dx*dx + dy*dy <= z.r*z.r) return z; } return null; }
+
+  function renderDiagram(){ const existing = diagramSVG.querySelectorAll('.pin, .pin-label, .zone-guide'); existing.forEach(n=>n.remove()); ZONES.forEach(z=>{ const c = document.createElementNS('http://www.w3.org/2000/svg','circle'); c.setAttribute('cx', String(z.x)); c.setAttribute('cy', String(z.y)); c.setAttribute('r', String(z.r)); c.setAttribute('fill', 'none'); c.setAttribute('stroke', '#f1f5f9'); c.setAttribute('stroke-width','1'); c.classList.add('zone-guide'); diagramSVG.appendChild(c); }); const list = current.diagram[view] || []; list.forEach((p, idx)=>{ const pin = document.createElementNS('http://www.w3.org/2000/svg','circle'); pin.setAttribute('cx', String(p.x)); pin.setAttribute('cy', String(p.y)); pin.setAttribute('r', '6'); pin.setAttribute('fill', '#d9534f'); pin.setAttribute('stroke', '#600'); pin.setAttribute('stroke-width','1'); pin.classList.add('pin'); pin.style.cursor = 'grab'; pin.dataset.idx = idx; pin.dataset.view = view; const txt = document.createElementNS('http://www.w3.org/2000/svg','text'); txt.setAttribute('x', String(p.x + 9)); txt.setAttribute('y', String(p.y + 4)); txt.setAttribute('font-size', '10'); txt.setAttribute('fill', '#222'); txt.classList.add('pin-label'); txt.textContent = p.label; pin.addEventListener('pointerdown', (ev)=>{ ev.stopPropagation(); pin.setPointerCapture(ev.pointerId); const start = svgPoint(ev); const origX = p.x, origY = p.y; function onMove(me){ const pt = svgPoint(me); const dx = pt.x - start.x, dy = pt.y - start.y; let nx = origX + dx, ny = origY + dy; const zone = findZone(nx, ny); if(zone){ nx = zone.x; ny = zone.y; } p.x = nx; p.y = ny; renderDiagram(); renderPinList(); } function onUp(mu){ try{ pin.releasePointerCapture(mu.pointerId); } catch(e){} diagramSVG.removeEventListener('pointermove', onMove); diagramSVG.removeEventListener('pointerup', onUp); } diagramSVG.addEventListener('pointermove', onMove); diagramSVG.addEventListener('pointerup', onUp); }); diagramSVG.appendChild(pin); diagramSVG.appendChild(txt); }); renderPinList(); }
+
+  diagramSVG.addEventListener('click', (e)=>{ if(e.target.classList.contains('pin')) return; const pt = svgPoint(e); const zone = findZone(pt.x, pt.y); if(zone){ const label = prompt('Label for ' + zone.name + ':', zone.name); if(label === null) return; current.diagram[view].push({ x: zone.x, y: zone.y, label }); } else { const label = prompt('Label for this pin:', ''); if(label === null) return; current.diagram[view].push({ x: pt.x, y: pt.y, label }); } renderDiagram(); });
+
+  function renderPinList(){ pinList.innerHTML = ''; const list = current.diagram[view] || []; if(!list.length){ pinList.innerHTML = '<div class="muted small">No pins yet. Click the silhouette to add one.</div>'; return; } list.forEach((p, i)=>{ const row = document.createElement('div'); row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.alignItems = 'center'; row.style.padding = '6px'; row.style.border = '1px solid #eef2f7'; row.style.marginBottom = '6px'; row.style.borderRadius = '6px'; const left = document.createElement('div'); left.textContent = `${p.label} — (${Math.round(p.x)}, ${Math.round(p.y)})`; const controls = document.createElement('div'); controls.style.display='flex'; controls.style.gap='6px'; const edit = document.createElement('button'); edit.textContent='Edit'; edit.className='btn btn-gray'; const del = document.createElement('button'); del.textContent='Del'; del.className='btn btn-red'; edit.addEventListener('click', ()=>{ const n = prompt('Edit label:', p.label); if(n!==null){ p.label = n; renderDiagram(); }}); del.addEventListener('click', ()=>{ current.diagram[view].splice(i,1); renderDiagram(); }); controls.appendChild(edit); controls.appendChild(del); row.appendChild(left); row.appendChild(controls); pinList.appendChild(row); }); }
+
+  document.getElementById('addMedBtn').addEventListener('click', ()=>{ const v = document.getElementById('medInput').value.trim(); if(!v) return; current.meds.unshift({ text:v, time: new Date().toLocaleTimeString() }); document.getElementById('medInput').value=''; renderMedLog(); });
+  function renderMedLog(){ medLog.innerHTML = ''; if(!current.meds.length){ medLog.innerHTML = '<div class="muted small">No meds logged.</div>'; return;} current.meds.forEach((m,i)=>{ const d = document.createElement('div'); d.style.padding='6px'; d.style.border='1px solid #eef2f7'; d.style.marginBottom='6px'; d.style.borderRadius='6px'; d.textContent = `${m.time} — ${m.text}`; medLog.appendChild(d); }); }
+
+  document.getElementById('addTreatBtn').addEventListener('click', ()=>{ const v = document.getElementById('treatInput').value.trim(); if(!v) return; current.treatments.unshift({ text:v, time: new Date().toLocaleTimeString() }); document.getElementById('treatInput').value=''; renderTreatLog(); });
+  function renderTreatLog(){ treatLog.innerHTML = ''; if(!current.treatments.length){ treatLog.innerHTML = '<div class="muted small">No treatments logged.</div>'; return;} current.treatments.forEach((t,i)=>{ const d = document.createElement('div'); d.style.padding='6px'; d.style.border='1px solid #eef2f7'; d.style.marginBottom='6px'; d.style.borderRadius='6px'; d.textContent = `${t.time} — ${t.text}`; treatLog.appendChild(d); }); }
+
+  function renderReports(filter=''){ reportsList.innerHTML = ''; const list = reports.filter(r => { if(!filter) return true; const q = filter.toLowerCase(); return (r.PatientName||'').toLowerCase().includes(q) || (r.id||'').toLowerCase().includes(q) || (r.PTNumber||'').toLowerCase().includes(q); }); if(!list.length){ reportsList.innerHTML = '<div class="muted small">No saved reports.</div>'; return; } list.forEach((r, idx)=>{ const row = document.createElement('div'); row.style.display='flex'; row.style.justifyContent='space-between'; row.style.alignItems='center'; row.style.padding='8px'; row.style.border='1px solid #eef2f7'; row.style.marginBottom='8px'; row.style.borderRadius='6px'; const left = document.createElement('div'); const title = document.createElement('div'); title.style.fontWeight='600'; title.textContent = r.id || '(no id)'; const meta = document.createElement('div'); meta.className='tiny muted'; meta.textContent = `${r.Date} — ${r.PatientName || 'Unnamed'}`; left.appendChild(title); left.appendChild(meta); const controls = document.createElement('div'); controls.style.display='flex'; controls.style.gap='6px'; const edit = document.createElement('button'); edit.textContent='Edit'; edit.className='btn btn-gray'; const exp = document.createElement('button'); exp.textContent='Export'; exp.className='btn btn-primary'; const pv = document.createElement('button'); pv.textContent='Print View'; pv.className='btn btn-gray'; const del = document.createElement('button'); del.textContent='Delete'; del.className='btn btn-red'; edit.addEventListener('click', ()=> loadReport(idx)); exp.addEventListener('click', ()=> exportPDF(reports[idx])); pv.addEventListener('click', ()=> openPrintView(reports[idx])); del.addEventListener('click', ()=> { if(confirm('Delete this report?')){ reports.splice(idx,1); persistReports(); renderReports(); }}); controls.appendChild(edit); controls.appendChild(exp); controls.appendChild(pv); controls.appendChild(del); row.appendChild(left); row.appendChild(controls); reportsList.appendChild(row); }); }
+
+  function persistReports(){ localStorage.setItem(LS_KEY, JSON.stringify(reports)); }
+
+  document.getElementById('frontBtn').addEventListener('click', ()=>{ view='front'; document.getElementById('frontBtn').classList.add('btn-primary'); document.getElementById('backBtn').classList.remove('btn-primary'); renderDiagram(); });
+  document.getElementById('backBtn').addEventListener('click', ()=>{ view='back'; document.getElementById('backBtn').classList.add('btn-primary'); document.getElementById('frontBtn').classList.remove('btn-primary'); renderDiagram(); });
+  document.getElementById('clearPins').addEventListener('click', ()=>{ if(confirm('Clear all pins on ' + view + '?')){ current.diagram[view]=[]; renderDiagram(); }});
+  document.getElementById('openSVG').addEventListener('click', ()=>{ const s = buildDiagramSVG(current, view); const w = window.open(); w.document.write(s); });
+
+  document.getElementById('genId').addEventListener('click', ()=>{ current.id = generateId(); alert('Assigned ' + current.id); });
+  document.getElementById('resetBtn').addEventListener('click', ()=>{ if(confirm('Reset form? All unsaved changes lost.')){ current = createEmptyReport(); loadFormFromCurrent(); renderDiagram(); renderMedLog(); renderTreatLog(); }});
+  document.getElementById('saveBtn').addEventListener('click', ()=>{ saveCurrentReport(); });
+
+  function loadFormFromCurrent(){ for(const el of form.elements){ if(!el.name) continue; if(current[el.name] !== undefined) el.value = current[el.name]; } }
+
+  function readFormIntoCurrent(){ for(const el of form.elements){ if(!el.name) continue; current[el.name] = el.value; } current.diagram = current.diagram || { front: [], back: [] }; }
+
+  function saveCurrentReport(){ readFormIntoCurrent(); if(!current.id) current.id = generateId(); const copy = JSON.parse(JSON.stringify(current)); reports.unshift(copy); persistReports(); renderReports(); alert('Saved ' + copy.id + ' — remember to export for filing.'); current = createEmptyReport(); loadFormFromCurrent(); renderDiagram(); renderMedLog(); renderTreatLog(); }
+
+  function loadReport(index){ const r = reports[index]; if(!r) return; current = JSON.parse(JSON.stringify(r)); loadFormFromCurrent(); renderDiagram(); renderMedLog(); renderTreatLog(); window.scrollTo({top:0,behavior:'smooth'}); }
+
+  async function exportPDF(reportObj){ try{ const { jsPDF } = window.jspdf; const doc = new jsPDF({ unit: 'pt', format: 'letter' }); // draw logo (embedded in header image src)
+      try {
+        const imgData = "data:image/jpeg;base64,JbpqGoWlm9w2yFbiZYzI3ooYjJ9hk1lhc6xmGp+yg7rzLxOSYPEVPaTVj53+BP7D...BRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAf/9k=";
+        doc.addImage(imgData, 'JPEG', 40, 10, 120, 40);
+      } catch(e){ /* ignore logo errors */ }
+      let y = 60;
+      doc.setFontSize(16); doc.text('MedStat EMS - Pierce County, WI', 180, 30);
+      doc.setFontSize(10); doc.text(`${reportObj.id || ''}    Date: ${reportObj.Date || ''}    Time: ${reportObj.Time || ''}`, 360, 60);
+      doc.setFontSize(11); doc.text('Patient Information', 40, 90); doc.text('Incident & Transport', 360, 90);
+      y = 110; doc.setFontSize(9);
+      doc.text(`Name: ${reportObj.PatientName || ''}`, 40, y); doc.text(`PT #: ${reportObj.PTNumber || ''}`, 240, y);
+      doc.text(`Receiving: ${reportObj.receivingFacility || ''}`, 360, y); y += 12;
+      doc.text(`DOB: ${reportObj.DOB || ''}   Age: ${reportObj.Age || ''}`, 40, y); doc.text(`Phone: ${reportObj.Phone || ''}`, 240, y);
+      y += 18;
+      doc.text(`Address: ${reportObj.Address || ''} ${reportObj.City || ''}, ${reportObj.State || ''} ${reportObj.Zip || ''}`, 40, y);
+      y += 24;
+      doc.setFontSize(11); doc.text('Chief Complaint', 40, y); y += 12; doc.setFontSize(9);
+      doc.text(String(reportObj.ChiefComplaint || ''), 40, y); y += 14;
+      doc.setFontSize(11); doc.text('Medication Administration', 40, y); y += 14; doc.setFontSize(9);
+      if(reportObj.meds && reportObj.meds.length){
+        reportObj.meds.forEach(m => { doc.text(`${m.time || ''} — ${m.text}`, 40, y); y += 12; if(y>700){doc.addPage(); y=40;} });
+      } else { doc.text('No medications recorded.', 40, y); y += 14; }
+      doc.setFontSize(11); doc.text('Treatments / Interventions', 40, y); y += 14; doc.setFontSize(9);
+      if(reportObj.treatments && reportObj.treatments.length){
+        reportObj.treatments.forEach(t => { doc.text(`${t.time || ''} — ${t.text}`, 40, y); y += 12; if(y>700){doc.addPage(); y=40;} });
+      } else { doc.text('No treatments recorded.', 40, y); y += 14; }
+      const haveFront = reportObj.diagram && reportObj.diagram.front && reportObj.diagram.front.length;
+      const haveBack = reportObj.diagram && reportObj.diagram.back && reportObj.diagram.back.length;
+      if(haveFront || haveBack){
+        doc.addPage(); doc.setFontSize(11); doc.text('Body Diagrams', 40, 40);
+        const promises = [];
+        if(haveFront) promises.push(svgToPngDataUrl(buildDiagramSVG(reportObj,'front'), 350, 700)); else promises.push(Promise.resolve(null));
+        if(haveBack) promises.push(svgToPngDataUrl(buildDiagramSVG(reportObj,'back'), 350, 700)); else promises.push(Promise.resolve(null));
+        const imgs = await Promise.all(promises);
+        if(imgs[0]) doc.addImage(imgs[0], 'PNG', 40, 80, 250, 420);
+        if(imgs[1]) doc.addImage(imgs[1], 'PNG', 320, 80, 250, 420);
+      }
+      doc.addPage();
+      doc.setFontSize(11); doc.text('Narrative / Notes', 40, 40); doc.setFontSize(9);
+      const narrative = String(reportObj.Narrative || '');
+      const split = doc.splitTextToSize(narrative, 500);
+      doc.text(split, 40, 60);
+      doc.setFontSize(8); doc.text(`${reportObj.id || ''} — Exported ${new Date().toLocaleString()}`, 40, 780);
+      const filename = (reportObj.id || 'PCR') + '.pdf';
+      doc.save(filename);
+    }catch(err){ alert('Export failed: ' + err.message); } }
+
+  function buildDiagramSVG(reportObj, which){ const silhouette = `M100 20 C80 20 65 36 60 60 C56 82 60 104 70 118 C82 132 96 140 100 140 C104 140 118 132 130 118 C140 104 144 82 140 60 C135 36 120 20 100 20 M100 140 L100 210 M72 150 L56 230 M128 150 L144 230 M100 210 L86 300 M100 210 L114 300`; const pins = (reportObj.diagram && reportObj.diagram[which]) || []; const parts = []; parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 400" width="350" height="700">`); parts.push(`<rect width="100%" height="100%" fill="white"/>`); parts.push(`<path d="${silhouette}" stroke="#222" stroke-width="2" fill="none"/>`); pins.forEach(p=>{ parts.push(`<circle cx="${p.x}" cy="${p.y}" r="6" fill="#d9534f" stroke="#600" stroke-width="1"/>`); parts.push(`<text x="${p.x+9}" y="${p.y+4}" font-size="12" fill="#222">${escapeXml(p.label)}</text>`); }); parts.push(`</svg>`); return parts.join(''); }
+
+  function escapeXml(s){ return String(s).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c])); }
+
+  async function svgToPngDataUrl(svgString, width=600, height=1200){ return new Promise((resolve)=>{ const img = new Image(); img.onload = function(){ const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,width,height); ctx.drawImage(img,0,0,width,height); resolve(canvas.toDataURL('image/png')); }; img.onerror = function(){ const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,width,height); resolve(canvas.toDataURL('image/png')); }; img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString); }); }
+
+  function openPrintView(reportObj){ const frontSvg = buildDiagramSVG(reportObj, 'front'); const backSvg = buildDiagramSVG(reportObj, 'back'); const html = `<html><head><title>${reportObj.id || 'PCR'} - Print View</title><style>body{font-family:Arial,Helvetica,sans-serif;margin:18px;color:#222} .section{border:1px solid #e6e6e6;padding:10px;margin-bottom:10px} table{width:100%;border-collapse:collapse} th,td{border:1px solid #eee;padding:6px;font-size:13px}</style></head><body><div style="display:flex;gap:12px;align-items:center"><img src="data:image/jpeg;base64,JbpqGoWlm9w2yFbiZYzI3ooYjJ9hk1lhc6xmGp+yg7rzLxOSYPEVPaTVj53+BP7D...BRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAf/9k=" style="width:140px;height:auto;margin-right:12px"/><div><h2>MedStat EMS - Pierce County, WI</h2><div>PCR ID: ${reportObj.id||''}</div><div>Date: ${reportObj.Date||''} Time: ${reportObj.Time||''}</div></div></div><div class="section"><h4>Patient</h4><div>Name: ${escapeXml(reportObj.PatientName||'')}</div><div>DOB: ${escapeXml(reportObj.DOB||'')} Age: ${escapeXml(reportObj.Age||'')}</div><div>Phone: ${escapeXml(reportObj.Phone||'')}</div><div>Address: ${escapeXml(reportObj.Address||'')} ${escapeXml(reportObj.City||'')}, ${escapeXml(reportObj.State||'')} ${escapeXml(reportObj.Zip||'')}</div></div><div class="section"><h4>Medications</h4>${reportObj.meds && reportObj.meds.length ? reportObj.meds.map(m=>`<div>${escapeXml(m.time)} — ${escapeXml(m.text)}</div>`).join('') : '<div>No meds recorded.</div>'}</div><div class="section" style="display:flex;gap:12px"><div style="flex:1"><h4>Treatments</h4>${reportObj.treatments && reportObj.treatments.length ? reportObj.treatments.map(t=>`<div>${escapeXml(t.time)} — ${escapeXml(t.text)}</div>`).join('') : '<div>No treatments recorded.</div>'}</div><div style="flex:1"><h4>Diagrams</h4><div style="display:flex;gap:12px"><div>${frontSvg}</div><div>${backSvg}</div></div></div></div><div class="section"><h4>Narrative</h4><div style="white-space:pre-wrap">${escapeXml(reportObj.Narrative||'')}</div></div></body></html>`; const w = window.open(); w.document.write(html); w.document.close(); }
+
+  document.getElementById('exportCurrentBtn').addEventListener('click', ()=>{ readFormIntoCurrent(); exportPDF(current); });
+  document.getElementById('exportAllBtn').addEventListener('click', ()=>{ const sel = reports[0]; if(!sel){ alert('No saved reports to export.'); return; } exportPDF(sel); });
+  document.getElementById('printViewBtn').addEventListener('click', ()=>{ readFormIntoCurrent(); openPrintView(current); });
+  document.getElementById('reportsFilter').addEventListener('input', (e)=> renderReports(e.target.value));
+  document.getElementById('cheatToggle').addEventListener('click', ()=>{ const cs = document.getElementById('cheatSheet'); cs.style.display = cs.style.display === 'none' ? 'block' : 'none'; });
+
+  loadFormFromCurrent(); renderDiagram(); renderMedLog(); renderTreatLog(); renderReports(); window.buildDiagramSVG = buildDiagramSVG; window.svgToPngDataUrl = svgToPngDataUrl;
+
+  window.addEventListener('beforeunload', ()=>{ try{ localStorage.setItem(LS_KEY, JSON.stringify(reports)); }catch(e){} });
+
+})();
+</script>
+</body>
+</html>
